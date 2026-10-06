@@ -1,0 +1,9 @@
+Django==5.2.17
+djangorestframework==3.16.1
+django-allauth[socialaccount]==65.19.5
+PyJWT[crypto]==2.15.1
+python-dotenv==1.2.3
+pytest==8.4.2
+pytest-django==4.14.0
+requests==2.34.2
+playwright==1.63.0
