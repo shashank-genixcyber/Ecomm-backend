@@ -109,13 +109,13 @@ def test_tampered_and_expired_session_cookies_are_rejected(user):
 
 @pytest.mark.parametrize("secret", ["", "too-short"])
 def test_missing_or_weak_backend_secret_fails_startup(secret):
-    result = subprocess.run([sys.executable, "manage.py", "check"], cwd=ROOT, env={**os.environ, "DJANGO_SECRET_KEY": secret}, capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "manage.py", "check"], cwd=ROOT, env={**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings", "DJANGO_SECRET_KEY": secret}, capture_output=True, text=True)
     assert result.returncode != 0
     assert "DJANGO_SECRET_KEY" in result.stderr
 
 
 def test_production_cookie_settings_and_insecure_provider_rejection():
-    env = {**os.environ, "DJANGO_DEBUG": "false", "OIDC_SERVER_URL": "https://accounts.google.com"}
+    env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings", "DJANGO_DEBUG": "false", "OIDC_SERVER_URL": "https://accounts.google.com"}
     result = subprocess.run([sys.executable, "-c", "from config import settings; import json; print(json.dumps([settings.SESSION_COOKIE_SECURE, settings.CSRF_COOKIE_SECURE, settings.SESSION_COOKIE_HTTPONLY]))"], cwd=ROOT, env=env, capture_output=True, text=True, check=True)
     assert json.loads(result.stdout) == [True, True, True]
     result = subprocess.run([sys.executable, "manage.py", "check"], cwd=ROOT, env={**env, "OIDC_SERVER_URL": "http://example.com"}, capture_output=True, text=True)

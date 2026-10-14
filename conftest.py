@@ -6,4 +6,4 @@ os.environ["OIDC_CLIENT_ID"] = "test-client"
 os.environ["OIDC_CLIENT_SECRET"] = "test-only-client-secret"
 os.environ["OIDC_SERVER_URL"] = "http://127.0.0.1:9999"
 os.environ["DJANGO_DEBUG"] = "true"
-
+os.environ["AZURE_KEY_VAULT_URL"] = ""  # Tests never contact the developer's vault.

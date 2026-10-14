@@ -3,13 +3,15 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from .key_vault import load_application_secrets
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
+_application_secrets = load_application_secrets()
+SECRET_KEY = _application_secrets["DJANGO_SECRET_KEY"]
 if not SECRET_KEY or len(SECRET_KEY) < 50:
-    raise ImproperlyConfigured("Set a DJANGO_SECRET_KEY of at least 50 characters; run scripts/init_env.py locally.")
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY must contain at least 50 characters in the configured secret source.")
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 CSRF_TRUSTED_ORIGINS = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
@@ -50,7 +52,8 @@ SOCIALACCOUNT_STORE_TOKENS = False
 SOCIALACCOUNT_LOGIN_ON_GET = False
 OIDC_SERVER_URL = os.getenv("OIDC_SERVER_URL", "https://accounts.google.com")
 OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
-OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_CLIENT_SECRET = _application_secrets["OIDC_CLIENT_SECRET"]
+del _application_secrets
 OIDC_PROVIDER_NAME = os.getenv("OIDC_PROVIDER_NAME", "Google")
 if bool(OIDC_CLIENT_ID) != bool(OIDC_CLIENT_SECRET):
     raise ImproperlyConfigured("Set both OIDC_CLIENT_ID and OIDC_CLIENT_SECRET.")

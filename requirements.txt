@@ -7,3 +7,5 @@ pytest==8.4.2
 pytest-django==4.14.0
 requests==2.34.2
 playwright==1.63.0
+azure-identity==1.26.0
+azure-keyvault-secrets==4.11.3
