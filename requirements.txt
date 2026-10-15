@@ -9,3 +9,4 @@ requests==2.34.2
 playwright==1.63.0
 azure-identity==1.26.0
 azure-keyvault-secrets==4.11.3
+cryptography==50.0.2

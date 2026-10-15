@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -6,9 +7,28 @@ from dotenv import load_dotenv
 from .key_vault import load_application_secrets
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+DEMO_ENABLED = os.getenv("ECOMM_DEMO_MODE", "false").lower() == "true"
+if DEMO_ENABLED:
+    from demo.audit import environment_name
+    DEMO_ENVIRONMENT = environment_name()
+DEMO_ASSET_DIR = Path(os.getenv("ECOMM_DEMO_DIR", str(BASE_DIR / ".demo"))).resolve()
+DEMO_LOG_PATH = DEMO_ASSET_DIR / "ecomm-demo.jsonl"
+DEMO_PROVIDER_PORT = int(os.getenv("ECOMM_DEMO_PROVIDER_PORT", "9443"))
+DEMO_PROVIDER_URL = f"https://127.0.0.1:{DEMO_PROVIDER_PORT}"
+DEMO_FRONTEND_ORIGIN = os.getenv("ECOMM_DEMO_FRONTEND_ORIGIN", "http://127.0.0.1:5173")
+if not DEMO_ENABLED:
+    load_dotenv(BASE_DIR / ".env")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
-_application_secrets = load_application_secrets()
+if DEMO_ENABLED:
+    try:
+        _bootstrap = json.loads((DEMO_ASSET_DIR / "bootstrap.json").read_text())
+        _application_secrets = {"DJANGO_SECRET_KEY": _bootstrap["django_secret_key"], "OIDC_CLIENT_SECRET": _bootstrap["web_client_secret"]}
+        del _bootstrap
+    except (OSError, ValueError, KeyError):
+        raise ImproperlyConfigured("Initialize local demo assets with python scripts/init_demo.py first.") from None
+    DEBUG = False
+else:
+    _application_secrets = load_application_secrets()
 SECRET_KEY = _application_secrets["DJANGO_SECRET_KEY"]
 if not SECRET_KEY or len(SECRET_KEY) < 50:
     raise ImproperlyConfigured("DJANGO_SECRET_KEY must contain at least 50 characters in the configured secret source.")
@@ -50,8 +70,8 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_ONLY = True
 SOCIALACCOUNT_STORE_TOKENS = False
 SOCIALACCOUNT_LOGIN_ON_GET = False
-OIDC_SERVER_URL = os.getenv("OIDC_SERVER_URL", "https://accounts.google.com")
-OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
+OIDC_SERVER_URL = DEMO_PROVIDER_URL + "/demo-provider" if DEMO_ENABLED else os.getenv("OIDC_SERVER_URL", "https://accounts.google.com")
+OIDC_CLIENT_ID = "everyday-web" if DEMO_ENABLED else os.getenv("OIDC_CLIENT_ID", "")
 OIDC_CLIENT_SECRET = _application_secrets["OIDC_CLIENT_SECRET"]
 del _application_secrets
 OIDC_PROVIDER_NAME = os.getenv("OIDC_PROVIDER_NAME", "Google")
@@ -86,3 +106,27 @@ TIME_ZONE = "UTC"
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+if DEMO_ENABLED:
+    ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
+    CSRF_TRUSTED_ORIGINS = [DEMO_FRONTEND_ORIGIN]
+    DATABASES["default"]["NAME"] = DEMO_ASSET_DIR / "db.sqlite3"
+    SESSION_COOKIE_SECURE = False  # Explicitly loopback HTTP browser traffic only.
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_NAME = "ecomm_demo_sessionid"
+    CSRF_COOKIE_NAME = "ecomm_demo_csrftoken"
+    OIDC_SERVER_URL = DEMO_PROVIDER_URL + "/demo-provider"
+    OIDC_CLIENT_ID = "everyday-web"
+    OIDC_PROVIDER_NAME = "Local Demo"
+    SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"][0].update(
+        client_id=OIDC_CLIENT_ID, name=OIDC_PROVIDER_NAME)
+    SOCIALACCOUNT_PROVIDERS["openid_connect"]["APPS"][0]["settings"]["server_url"] = OIDC_SERVER_URL
+    SOCIALACCOUNT_ADAPTER = "demo.adapter.DemoSocialAccountAdapter"
+    MIDDLEWARE.append("demo.middleware.DemoAuditMiddleware")
+    LOGGING = {
+        "version": 1, "disable_existing_loggers": False,
+        "handlers": {"demo": {"class": "demo.audit.SafeLogHandler"}},
+        "root": {"handlers": ["demo"], "level": "INFO"},
+        "loggers": {name: {"handlers": [], "propagate": True, "level": "INFO"}
+                    for name in ("django", "django.server", "django.request", "urllib3")},
+    }

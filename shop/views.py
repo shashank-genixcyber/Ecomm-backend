@@ -12,6 +12,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .models import Order, Product
+from demo.runtime import DemoFailure, shopping
+
+
+def demo_failure(error):
+    return Response({"detail": "A demo credential dependency failed. Check the demo panel and shared log.",
+                     **error.result}, status=503)
 
 
 @never_cache
@@ -25,6 +31,7 @@ def session(request):
         "login_url": "/accounts/oidc/shop/login/",
         "provider": settings.OIDC_PROVIDER_NAME,
         "oauth_configured": bool(settings.OIDC_CLIENT_ID and settings.OIDC_CLIENT_SECRET),
+        "demo_enabled": settings.DEMO_ENABLED,
     })
 
 
@@ -32,7 +39,12 @@ def session(request):
 @permission_classes([AllowAny])
 def products(request):
     catalog = Product.objects.order_by("id").values("id", "name", "description", "category", "artwork", "price")
-    return Response([{**product, "price": str(product["price"])} for product in catalog])
+    result = [{**product, "price": str(product["price"])} for product in catalog]
+    try:
+        shopping("products", result)
+    except DemoFailure as error:
+        return demo_failure(error)
+    return Response(result)
 
 
 class CartItem(serializers.Serializer):
@@ -48,7 +60,12 @@ class Checkout(serializers.Serializer):
 def orders(request):
     if request.method == "GET":
         history = Order.objects.filter(user=request.user).values("id", "items", "total", "created_at")
-        return Response([{**order, "total": str(order["total"])} for order in history])
+        result = [{**order, "total": str(order["total"])} for order in history]
+        try:
+            shopping("orders", [{"id": order["id"], "total": order["total"]} for order in result])
+        except DemoFailure as error:
+            return demo_failure(error)
+        return Response(result)
     checkout = Checkout(data=request.data)
     checkout.is_valid(raise_exception=True)
     cart = checkout.validated_data["items"]
@@ -63,6 +80,10 @@ def orders(request):
             "product_id": product.pk, "name": product.name, "price": str(product.price), "quantity": item["quantity"],
         } for item in cart for product in [catalog[item["product_id"]]]]
         total = sum((Decimal(item["price"]) * item["quantity"] for item in items), Decimal("0"))
+        try:
+            shopping("checkout", {"items": items, "total": str(total)})
+        except DemoFailure as error:
+            return demo_failure(error)
         order = Order.objects.create(user=request.user, items=items, total=total)
     return Response({"id": order.pk, "items": items, "total": str(total), "created_at": order.created_at}, status=201)
 
